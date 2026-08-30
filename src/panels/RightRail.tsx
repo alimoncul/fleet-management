@@ -1,19 +1,19 @@
 import { useStore } from '../store';
 import { ago } from '../util';
-import { VehicleDetail } from './VehicleDetail';
+import { TruckDetail } from './TruckDetail';
 
 export function RightRail() {
-  const selectedId = useStore((s) => s.selectedId);
+  const selectedId = useStore((s) => s.selectedTruckId);
   return (
     <aside className="rail rail--right panel">
-      {selectedId ? <VehicleDetail /> : <WarningsFeed />}
+      {selectedId ? <TruckDetail /> : <WarningsFeed />}
     </aside>
   );
 }
 
 function WarningsFeed() {
   const alerts = useStore((s) => s.alerts);
-  const select = useStore((s) => s.select);
+  const selectTruck = useStore((s) => s.selectTruck);
 
   return (
     <>
@@ -28,7 +28,7 @@ function WarningsFeed() {
             key={a.id}
             type="button"
             className="alert"
-            onClick={() => select(a.vehicleId)}
+            onClick={() => selectTruck(a.truckId)}
           >
             <i
               className={

@@ -1,52 +1,58 @@
 import { useMemo } from 'react';
 import { Sparkline } from '../Sparkline';
-import { TYPE_COLOR } from '../mock';
+import { CLASS_COLOR, CLASS_LABEL, JOBS } from '../mock';
+import { jobStatus } from '../sim';
 import { useStore } from '../store';
-import type { VehicleType } from '../types';
+import type { TruckClass } from '../types';
 
-const TYPES: VehicleType[] = ['bus', 'taxi', 'train', 'tram'];
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+const CLASSES: TruckClass[] = ['tractor', 'box', 'flatbed', 'tanker', 'reefer'];
+const jobById = new Map(JOBS.map((j) => [j.id, j]));
 
 export function LeftRail() {
-  const vehicles = useStore((s) => s.vehicles);
-  const typeFilter = useStore((s) => s.typeFilter);
-  const toggleType = useStore((s) => s.toggleType);
-  const effHistory = useStore((s) => s.effHistory);
-  const selectedId = useStore((s) => s.selectedId);
-  const select = useStore((s) => s.select);
+  const trucks = useStore((s) => s.trucks);
+  const drivers = useStore((s) => s.drivers);
+  const cls = useStore((s) => s.fleetFilter.cls);
+  const toggleClass = useStore((s) => s.toggleClass);
+  const utilHistory = useStore((s) => s.utilHistory);
+  const selectedId = useStore((s) => s.selectedTruckId);
+  const selectTruck = useStore((s) => s.selectTruck);
+
+  const driverName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of drivers) m.set(d.truckId, d.name);
+    return m;
+  }, [drivers]);
 
   const { counts, online } = useMemo(() => {
-    const counts: Record<VehicleType, number> = { bus: 0, taxi: 0, train: 0, tram: 0 };
+    const counts: Record<TruckClass, number> = { tractor: 0, box: 0, flatbed: 0, tanker: 0, reefer: 0 };
     let online = 0;
-    for (const v of vehicles) {
-      counts[v.type]++;
-      if (v.status === 'online') online++;
+    for (const t of trucks) {
+      counts[t.cls]++;
+      if (t.status === 'online') online++;
     }
     return { counts, online };
-  }, [vehicles]);
+  }, [trucks]);
 
   const list = useMemo(
-    () =>
-      vehicles
-        .filter((v) => typeFilter.has(v.type))
-        .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })),
-    [vehicles, typeFilter],
+    () => trucks.filter((t) => cls.has(t.cls)).sort((a, b) => a.id.localeCompare(b.id)),
+    [trucks, cls],
   );
 
-  const eff = effHistory[effHistory.length - 1] ?? 0;
+  const util = utilHistory[utilHistory.length - 1] ?? 0;
 
   return (
     <aside className="rail rail--left panel">
       <div className="chips">
-        {TYPES.map((t) => (
+        {CLASSES.map((c) => (
           <button
-            key={t}
+            key={c}
             type="button"
-            className={typeFilter.has(t) ? 'chip chip--on' : 'chip'}
-            onClick={() => toggleType(t)}
+            className={cls.has(c) ? 'chip chip--on' : 'chip'}
+            onClick={() => toggleClass(c)}
+            title={CLASS_LABEL[c]}
           >
-            <i className="chip__dot" style={{ background: TYPE_COLOR[t] }} />
-            {counts[t]} {cap(t)}
+            <i className="chip__dot" style={{ background: CLASS_COLOR[c] }} />
+            {counts[c]} {CLASS_LABEL[c]}
           </button>
         ))}
       </div>
@@ -58,46 +64,48 @@ export function LeftRail() {
         </div>
         <div className="stat">
           <span className="stat__k stat__k--bad">Offline</span>
-          <b>{vehicles.length - online}</b>
+          <b>{trucks.length - online}</b>
         </div>
       </div>
 
-      <div className="card card--eff">
-        <div className="card__h">Operational Efficiency</div>
+      <div className="card">
+        <div className="card__h">Fleet Utilisation</div>
         <div className="card__big">
-          {eff}
+          {util}
           <small>%</small>
         </div>
-        <Sparkline data={effHistory} />
+        <Sparkline data={utilHistory} />
       </div>
 
       <div className="veh-list">
-        {list.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            className={v.id === selectedId ? 'vrow vrow--on' : 'vrow'}
-            onClick={() => select(v.id === selectedId ? null : v.id)}
-          >
-            <i
-              className="vrow__dot"
-              style={{ background: TYPE_COLOR[v.type], opacity: v.status === 'online' ? 1 : 0.35 }}
-            />
-            <div className="vrow__main">
-              <div className="vrow__id">{v.id}</div>
-              <div className="vrow__sub">{v.nextStop}</div>
-            </div>
-            <div className="vrow__meta">
-              <span className={v.status === 'online' ? 'tag tag--ok' : 'tag tag--bad'}>
-                {v.status}
-              </span>
-              <span className="vrow__off">
-                {v.scheduleOffsetMin > 0 ? '+' : ''}
-                {Math.round(v.scheduleOffsetMin)}m
-              </span>
-            </div>
-          </button>
-        ))}
+        {list.map((t) => {
+          const job = jobById.get(t.jobId);
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={t.id === selectedId ? 'vrow vrow--on' : 'vrow'}
+              onClick={() => selectTruck(t.id === selectedId ? null : t.id)}
+            >
+              <i
+                className="vrow__dot"
+                style={{ background: CLASS_COLOR[t.cls], opacity: t.status === 'online' ? 1 : 0.35 }}
+              />
+              <div className="vrow__main">
+                <div className="vrow__id">{t.id}</div>
+                <div className="vrow__sub">
+                  {driverName.get(t.id)} · {job ? `${job.origin.name} → ${job.dest.name}` : '—'}
+                </div>
+              </div>
+              <div className="vrow__meta">
+                <span className={t.status === 'online' ? 'tag tag--ok' : 'tag tag--bad'}>
+                  {jobStatus(t)}
+                </span>
+                <span className="vrow__off">{Math.round(t.fuelPct)}%</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );

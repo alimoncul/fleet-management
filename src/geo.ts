@@ -43,6 +43,18 @@ export function bearing(a: LngLat, b: LngLat): number {
 }
 
 // Position + heading at fraction t (0..1) along a polyline.
+// Shift a point ~meters to the right of the travel direction — so trucks sit on
+// the correct (right-hand) side of the road for Turkey, and outbound / return
+// traffic doesn't overlap on the centreline.
+export function offsetRight(lngLat: LngLat, headingDeg: number, meters: number): LngLat {
+  const th = (headingDeg * Math.PI) / 180;
+  const east = Math.cos(th);
+  const north = -Math.sin(th);
+  const dLat = (meters * north) / 111320;
+  const dLng = (meters * east) / (111320 * Math.cos((lngLat[1] * Math.PI) / 180));
+  return [lngLat[0] + dLng, lngLat[1] + dLat];
+}
+
 export function along(
   path: LngLat[],
   seg: number[],

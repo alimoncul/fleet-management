@@ -7,6 +7,34 @@ Remote: `git@github.com:alimoncul/fleet-management.git`
 
 ---
 
+## v2 — road-freight pivot (current)
+
+The build below shipped, then pivoted to a **road-freight** fleet. What changed:
+
+- **Vehicles are trucks** (tractor / box / flatbed / tanker / reefer), real TR-market
+  brands. Plates, not "Bus 6023".
+- **Routes → jobs.** No fixed loops; each truck runs a delivery leg
+  (origin → dest → return → next job) from `src/jobs.json` (14 legs across the
+  Marmara region, road-snapped via OSRM). `scripts/build-jobs.mjs` regenerates it.
+- **İstanbul / Marmara** map area. Positions offset ~9 m right of the centreline for
+  right-hand traffic.
+- **Nav trimmed to 4 real views:** Live Map, Fleet, Analytics, Crew.
+  Routes / Maintenance / Incidents deleted.
+- **Drivers** — `src/mock.ts` seeds a roster with 2D initial avatars
+  (`src/ui/Avatar.tsx`), tenure, experience, safety rating, and live
+  hours-of-service (4.5 h driving → 45 min break).
+- **Fleet view** — filterable table (class / brand / status / search) with 2D truck
+  icons (`src/ui/TruckIcon.tsx`), cargo + weight, job.
+- **Analytics view** — mock KPIs + inline-SVG charts.
+- **Crew view** — driver roster + detail (list `src/views/CrewView.tsx`).
+- Truck detail (right rail) now shows driver card + cargo/weight + trip progress +
+  fuel / odometer.
+
+The v1 sections below are kept for history; the data-model and mock-data details are
+superseded by `src/types.ts` / `src/mock.ts` / `src/jobs.json`.
+
+---
+
 ## 1. Reference & intent
 
 Reference image = a transit **ops-center** dashboard ("Traffic Management"):

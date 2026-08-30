@@ -1,72 +1,132 @@
 import type { FeatureCollection } from 'geojson';
-import { along } from './geo';
-import { makeVehicles, ROUTES } from './mock';
-import type { Vehicle } from './types';
-import { clamp01 } from './util';
+import { along, offsetRight } from './geo';
+import { BREAK_MIN, DRIVERS, JOBS, MAX_DRIVE_MIN, TRUCKS } from './mock';
+import type { Driver, Truck } from './types';
 
-// The live simulation state. Mutated in place each animation frame; the store
-// takes a snapshot from here a couple of times a second for the React panels.
-export const sim: Vehicle[] = makeVehicles();
+// Live simulation state, mutated in place each frame. The store snapshots it at 2 Hz.
+export const trucks: Truck[] = TRUCKS;
+export const drivers: Driver[] = DRIVERS;
 
-const routeById = new Map(ROUTES.map((r) => [r.id, r]));
+const jobById = new Map(JOBS.map((j) => [j.id, j]));
+const driverById = new Map(drivers.map((d) => [d.id, d]));
 
-function nextStopName(routeId: string, p: number, dir: 1 | -1): string {
-  const stops = routeById.get(routeId)!.stops;
-  if (dir === 1) {
-    for (const s of stops) if (s.at > p) return s.name;
-    return stops[stops.length - 1].name;
+const OFFSET_M = 9; // metres right of centreline
+
+function assignNextJob(t: Truck): void {
+  const cur = jobById.get(t.jobId)!;
+  // prefer a job whose origin is near where this truck just finished
+  const here = cur.origin.lngLat;
+  let best = JOBS[0];
+  let bestD = Infinity;
+  for (const j of JOBS) {
+    if (j.id === t.jobId) continue;
+    const dx = j.origin.lngLat[0] - here[0];
+    const dy = j.origin.lngLat[1] - here[1];
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = j;
+    }
   }
-  for (let i = stops.length - 1; i >= 0; i--) if (stops[i].at < p) return stops[i].name;
-  return stops[0].name;
+  t.jobId = best.id;
+  t.leg = 'out';
+  t.progress = 0;
+  t.lngLat = [best.origin.lngLat[0], best.origin.lngLat[1]];
+  t.fuelPct = 100;
 }
 
 export function step(dtSec: number): void {
   const now = Date.now();
-  for (const v of sim) {
-    if (v.status === 'offline') continue;
-    const r = routeById.get(v.routeId)!;
 
-    const dKm = (v.speedKmh / 3600) * dtSec;
-    let p = v.progress + (v.dir * dKm) / r.lengthKm;
-    if (p >= 1) {
-      p = 1;
-      v.dir = -1;
-    } else if (p <= 0) {
-      p = 0;
-      v.dir = 1;
+  for (const d of drivers) {
+    if (!d.resting) continue;
+    d.restLeftSec -= dtSec;
+    if (d.restLeftSec <= 0) {
+      d.resting = false;
+      d.restLeftSec = 0;
+      d.drivingMinSinceBreak = 0;
     }
-    v.progress = p;
-
-    const { lngLat, heading } = along(r.path, r.seg, r.lengthKm, p);
-    v.lngLat = lngLat;
-    v.heading = v.dir === 1 ? heading : (heading + 180) % 360;
-    v.nextStop = nextStopName(v.routeId, p, v.dir);
-
-    v.passengerLoad = clamp01(v.passengerLoad + (Math.random() - 0.5) * 0.03 * dtSec);
-    v.scheduleOffsetMin += (Math.random() - 0.5) * 0.05 * dtSec;
-    v.lastUpdate = now;
   }
 
-  // Rare signal drop / recovery.
+  for (const t of trucks) {
+    if (t.status === 'offline') continue;
+    const driver = driverById.get(t.driverId)!;
+    const job = jobById.get(t.jobId)!;
+
+    if (driver.resting) {
+      t.lastUpdate = now;
+      continue; // truck parked with its driver
+    }
+
+    if (t.dwellSec > 0) {
+      t.dwellSec -= dtSec;
+      if (t.dwellSec <= 0) {
+        t.dwellSec = 0;
+        if (t.leg === 'out') t.leg = 'back';
+        else assignNextJob(t);
+      }
+      t.lastUpdate = now;
+      continue;
+    }
+
+    const dKm = (t.speedKmh / 3600) * dtSec;
+    const sign = t.leg === 'out' ? 1 : -1;
+    let p = t.progress + (sign * dKm) / job.lengthKm;
+    if (p >= 1) {
+      p = 1;
+      t.dwellSec = 6 + Math.random() * 10;
+    } else if (p <= 0) {
+      p = 0;
+      t.dwellSec = 6 + Math.random() * 10;
+    }
+    t.progress = p;
+
+    const { lngLat, heading } = along(job.path, job.seg, job.lengthKm, p);
+    const dir = t.leg === 'out' ? heading : (heading + 180) % 360;
+    t.heading = dir;
+    t.lngLat = offsetRight(lngLat, dir, OFFSET_M);
+
+    t.odometerKm += dKm;
+    t.fuelPct = Math.max(3, t.fuelPct - dKm * 0.06);
+    driver.drivingMinSinceBreak += dtSec / 60;
+    if (driver.drivingMinSinceBreak >= MAX_DRIVE_MIN) {
+      driver.resting = true;
+      driver.restLeftSec = BREAK_MIN * 60;
+    }
+    t.lastUpdate = now;
+  }
+
+  // rare signal drop / recovery
   if (Math.random() < 0.02 * dtSec) {
-    const v = sim[Math.floor(Math.random() * sim.length)];
-    v.status = v.status === 'online' ? 'offline' : 'online';
-    v.lastUpdate = now;
+    const t = trucks[Math.floor(Math.random() * trucks.length)];
+    t.status = t.status === 'online' ? 'offline' : 'online';
+    t.lastUpdate = now;
   }
 }
 
-export function vehiclesFC(): FeatureCollection {
+export function jobStatus(t: Truck): string {
+  if (t.status === 'offline') return 'no signal';
+  if (driverById.get(t.driverId)?.resting) return 'driver resting';
+  if (t.dwellSec > 0) return t.leg === 'out' ? 'unloading' : 'loading';
+  return t.leg === 'out' ? 'en route' : 'returning';
+}
+
+export function isMoving(t: Truck): boolean {
+  return t.status === 'online' && t.dwellSec <= 0 && !driverById.get(t.driverId)?.resting;
+}
+
+export function trucksFC(): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: sim.map((v) => ({
+    features: trucks.map((t) => ({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: v.lngLat },
+      geometry: { type: 'Point', coordinates: t.lngLat },
       properties: {
-        id: v.id,
-        type: v.type,
-        status: v.status,
-        heading: Math.round(v.heading),
-        load: Math.round(v.passengerLoad * 100),
+        id: t.id,
+        cls: t.cls,
+        status: t.status,
+        heading: Math.round(t.heading),
+        moving: isMoving(t) ? 1 : 0,
       },
     })),
   };

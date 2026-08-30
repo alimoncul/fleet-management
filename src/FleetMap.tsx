@@ -10,8 +10,8 @@ import type {
 import type { FeatureCollection } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { along } from './geo';
-import { ROUTES } from './mock';
+import { JOBS } from './mock';
+import { jobStatus } from './sim';
 import { useStore } from './store';
 import { useSimulation } from './useSimulation';
 import type { LngLat } from './types';
@@ -22,32 +22,32 @@ const KEY = typeof rawKey === 'string' && rawKey ? rawKey : undefined;
 const MAP_STYLE = KEY
   ? `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}`
   : 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
-// Custom terrain only with a MapTiler key. The keyless Carto style already
-// ships hillshade, and there is no reliable keyless raster-dem source.
 const DEM_URL = KEY ? `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}` : null;
 
-const INITIAL = { longitude: 29.01, latitude: 41.04, zoom: 10.8, pitch: 55, bearing: -18 };
+const INITIAL = { longitude: 28.95, latitude: 40.9, zoom: 8.4, pitch: 38, bearing: -12 };
 
-const TYPE_COLOR_EXPR: ExpressionSpecification = [
+const CLASS_COLOR_EXPR: ExpressionSpecification = [
   'match',
-  ['get', 'type'],
-  'bus',
+  ['get', 'cls'],
+  'tractor',
   '#f5a524',
-  'taxi',
-  '#fde047',
-  'train',
+  'box',
   '#22d3ee',
-  'tram',
+  'flatbed',
+  '#4ade80',
+  'tanker',
+  '#fb5b78',
+  'reefer',
   '#a78bfa',
   '#9aa0aa',
 ];
 
-const routesFC: FeatureCollection = {
+const jobsFC: FeatureCollection = {
   type: 'FeatureCollection',
-  features: ROUTES.map((r) => ({
+  features: JOBS.map((j) => ({
     type: 'Feature',
-    geometry: { type: 'LineString', coordinates: r.path },
-    properties: { id: r.id, color: r.color },
+    geometry: { type: 'LineString', coordinates: j.path },
+    properties: { id: j.id },
   })),
 };
 
@@ -74,130 +74,148 @@ function buildLayers(map: MlMap): void {
   if (DEM_URL && !map.getSource('dem')) {
     try {
       map.addSource('dem', { type: 'raster-dem', url: DEM_URL, tileSize: 256 });
-      map.setTerrain({ source: 'dem', exaggeration: 1.3 });
+      map.setTerrain({ source: 'dem', exaggeration: 1.2 });
     } catch {
-      /* terrain is optional; map still works flat */
+      /* terrain optional */
     }
   }
 
-  if (map.getSource('routes')) return; // already built
+  if (map.getSource('jobs')) return;
 
-  map.addSource('routes', { type: 'geojson', data: routesFC });
+  map.addSource('jobs', { type: 'geojson', data: jobsFC });
   map.addLayer({
-    id: 'routes-line',
+    id: 'jobs-line',
     type: 'line',
-    source: 'routes',
+    source: 'jobs',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'color'], 'line-width': 2, 'line-opacity': 0.3 },
+    paint: { 'line-color': '#8b93a3', 'line-width': 1.5, 'line-opacity': 0.16 },
   } as LayerSpecification);
   map.addLayer({
-    id: 'routes-line-sel',
+    id: 'jobs-line-sel',
     type: 'line',
-    source: 'routes',
+    source: 'jobs',
     filter: ['==', ['get', 'id'], ''],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.95 },
+    paint: { 'line-color': '#f5a524', 'line-width': 3.5, 'line-opacity': 0.9 },
   } as LayerSpecification);
 
-  map.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addSource('endpoints', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  });
   map.addLayer({
-    id: 'stops-dot',
+    id: 'endpoints-dot',
     type: 'circle',
-    source: 'stops',
+    source: 'endpoints',
     paint: {
-      'circle-radius': 4,
-      'circle-color': '#e7e9ee',
+      'circle-radius': 5,
+      'circle-color': ['match', ['get', 'kind'], 'origin', '#4ade80', '#fb5b78'],
       'circle-stroke-width': 2,
       'circle-stroke-color': '#0b0e13',
     },
   } as LayerSpecification);
   map.addLayer({
-    id: 'stops-label',
+    id: 'endpoints-label',
     type: 'symbol',
-    source: 'stops',
+    source: 'endpoints',
     layout: {
       'text-field': ['get', 'name'],
       'text-size': 11,
-      'text-offset': [0, 1.1],
+      'text-offset': [0, 1.2],
       'text-anchor': 'top',
       'text-optional': true,
     },
-    paint: {
-      'text-color': '#c7ccd6',
-      'text-halo-color': '#0b0e13',
-      'text-halo-width': 1.2,
-    },
+    paint: { 'text-color': '#c7ccd6', 'text-halo-color': '#0b0e13', 'text-halo-width': 1.2 },
   } as LayerSpecification);
 
   addArrowImage(map);
-  map.addSource('vehicles', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addSource('trucks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
-    id: 'vehicles-halo',
+    id: 'trucks-halo',
     type: 'circle',
-    source: 'vehicles',
+    source: 'trucks',
     filter: ['==', ['get', 'id'], ''],
     paint: { 'circle-radius': 15, 'circle-color': '#ffffff', 'circle-opacity': 0.16 },
   } as LayerSpecification);
   map.addLayer({
-    id: 'vehicles-dot',
+    id: 'trucks-dot',
     type: 'circle',
-    source: 'vehicles',
+    source: 'trucks',
     paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 7.5],
-      'circle-color': TYPE_COLOR_EXPR,
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 3.5, 13, 7.5],
+      'circle-color': CLASS_COLOR_EXPR,
       'circle-stroke-width': 1.5,
       'circle-stroke-color': '#0b0e13',
-      'circle-opacity': ['case', ['==', ['get', 'status'], 'offline'], 0.3, 1],
+      'circle-opacity': [
+        'case',
+        ['==', ['get', 'status'], 'offline'],
+        0.25,
+        ['==', ['get', 'moving'], 0],
+        0.5,
+        1,
+      ],
     },
   } as LayerSpecification);
   map.addLayer({
-    id: 'vehicles-arrow',
+    id: 'trucks-arrow',
     type: 'symbol',
-    source: 'vehicles',
+    source: 'trucks',
     layout: {
       'icon-image': 'arrow',
       'icon-rotate': ['get', 'heading'],
       'icon-rotation-alignment': 'map',
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
-      'icon-size': ['interpolate', ['linear'], ['zoom'], 9, 0.4, 14, 0.8],
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 7, 0.35, 13, 0.75],
     },
-    paint: { 'icon-opacity': ['case', ['==', ['get', 'status'], 'offline'], 0.25, 0.95] },
+    paint: {
+      'icon-opacity': [
+        'case',
+        ['==', ['get', 'status'], 'offline'],
+        0.2,
+        ['==', ['get', 'moving'], 0],
+        0.35,
+        0.95,
+      ],
+    },
   } as LayerSpecification);
 }
 
-type Hover = { lngLat: LngLat; id: string; load: number; nextStop: string };
+type Hover = { lngLat: LngLat; id: string; status: string; cargo: string; route: string };
 
 export function FleetMap() {
   const mapRef = useRef<MapRef | null>(null);
   const [ready, setReady] = useState(false);
   const [hover, setHover] = useState<Hover | null>(null);
 
-  const selectedId = useStore((s) => s.selectedId);
-  const typeFilter = useStore((s) => s.typeFilter);
-  const vehicles = useStore((s) => s.vehicles);
+  const selectedId = useStore((s) => s.selectedTruckId);
+  const trucks = useStore((s) => s.trucks);
 
-  const selRouteId = useMemo(
-    () => vehicles.find((v) => v.id === selectedId)?.routeId ?? null,
-    [vehicles, selectedId],
+  const selJobId = useMemo(
+    () => trucks.find((t) => t.id === selectedId)?.jobId ?? null,
+    [trucks, selectedId],
   );
 
-  const stopsFC = useMemo<FeatureCollection>(() => {
-    const r = ROUTES.find((x) => x.id === selRouteId);
+  const endpointsFC = useMemo<FeatureCollection>(() => {
+    const job = JOBS.find((j) => j.id === selJobId);
     return {
       type: 'FeatureCollection',
-      features: r
-        ? r.stops.map((s) => ({
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: along(r.path, r.seg, r.lengthKm, s.at).lngLat,
+      features: job
+        ? [
+            {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: job.origin.lngLat },
+              properties: { kind: 'origin', name: job.origin.name },
             },
-            properties: { name: s.name },
-          }))
+            {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: job.dest.lngLat },
+              properties: { kind: 'dest', name: job.dest.name },
+            },
+          ]
         : [],
     };
-  }, [selRouteId]);
+  }, [selJobId]);
 
   useSimulation(mapRef);
 
@@ -208,42 +226,31 @@ export function FleetMap() {
     setReady(true);
   }, []);
 
-  // Type filter + selection highlight.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    const typed: ExpressionSpecification = ['in', ['get', 'type'], ['literal', [...typeFilter]]];
-    map.setFilter('vehicles-dot', typed);
-    map.setFilter('vehicles-arrow', typed);
-    map.setFilter('vehicles-halo', ['all', ['==', ['get', 'id'], selectedId ?? ''], typed]);
-    map.setFilter('routes-line-sel', ['==', ['get', 'id'], selRouteId ?? '']);
-  }, [selectedId, selRouteId, typeFilter, ready]);
+    map.setFilter('trucks-halo', ['==', ['get', 'id'], selectedId ?? '']);
+    map.setFilter('jobs-line-sel', ['==', ['get', 'id'], selJobId ?? '']);
+  }, [selectedId, selJobId, ready]);
 
-  // Stops for the selected vehicle's route.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
-    (map.getSource('stops') as GeoJSONSource | undefined)?.setData(stopsFC);
-  }, [stopsFC, ready]);
+    (map.getSource('endpoints') as GeoJSONSource | undefined)?.setData(endpointsFC);
+  }, [endpointsFC, ready]);
 
-  // Fly to a newly selected vehicle.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !selectedId) return;
-    const v = useStore.getState().vehicles.find((x) => x.id === selectedId);
-    if (v) {
-      map.flyTo({
-        center: v.lngLat,
-        zoom: Math.max(map.getZoom(), 12.5),
-        pitch: 55,
-        duration: 1200,
-      });
+    const t = useStore.getState().trucks.find((x) => x.id === selectedId);
+    if (t) {
+      map.flyTo({ center: t.lngLat, zoom: Math.max(map.getZoom(), 10.5), duration: 1200 });
     }
   }, [selectedId]);
 
   const onClick = useCallback((e: MapMouseEvent) => {
     const f = e.features?.[0];
-    useStore.getState().select(f ? String(f.properties?.id) : null);
+    useStore.getState().selectTruck(f ? String(f.properties?.id) : null);
   }, []);
 
   const onMouseMove = useCallback((e: MapMouseEvent) => {
@@ -254,15 +261,16 @@ export function FleetMap() {
       setHover((h) => (h ? null : h));
       return;
     }
-    const v = useStore.getState().vehicles.find((x) => x.id === f.properties?.id);
-    if (v) {
-      setHover({
-        lngLat: v.lngLat,
-        id: v.id,
-        load: Math.round(v.passengerLoad * 100),
-        nextStop: v.nextStop,
-      });
-    }
+    const t = useStore.getState().trucks.find((x) => x.id === f.properties?.id);
+    if (!t) return;
+    const job = JOBS.find((j) => j.id === t.jobId);
+    setHover({
+      lngLat: t.lngLat,
+      id: t.id,
+      status: jobStatus(t),
+      cargo: job?.cargo ?? '—',
+      route: job ? `${job.origin.name} → ${job.dest.name}` : '—',
+    });
   }, []);
 
   const zoomBy = (d: number) => {
@@ -286,7 +294,7 @@ export function FleetMap() {
         initialViewState={INITIAL}
         mapStyle={MAP_STYLE}
         maxPitch={75}
-        interactiveLayerIds={ready ? ['vehicles-dot'] : undefined}
+        interactiveLayerIds={ready ? ['trucks-dot'] : undefined}
         onLoad={onLoad}
         onClick={onClick}
         onMouseMove={onMouseMove}
@@ -302,8 +310,8 @@ export function FleetMap() {
             className="vpop"
           >
             <div className="vpop__id">{hover.id}</div>
-            <div className="vpop__row">Next · {hover.nextStop}</div>
-            <div className="vpop__row">Load · {hover.load}%</div>
+            <div className="vpop__row">{hover.status} · {hover.cargo}</div>
+            <div className="vpop__row">{hover.route}</div>
           </Popup>
         )}
       </Map>

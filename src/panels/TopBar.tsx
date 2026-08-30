@@ -1,8 +1,16 @@
 import { useStore } from '../store';
+import type { View } from '../types';
 
-const TABS = ['Live Map', 'Fleet', 'Routes', 'Analytics', 'Maintenance', 'Incidents', 'Crew'];
+const TABS: { id: View; label: string }[] = [
+  { id: 'map', label: 'Live Map' },
+  { id: 'fleet', label: 'Fleet' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'crew', label: 'Crew' },
+];
 
 export function TopBar() {
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
   const alertCount = useStore((s) => s.alerts.length);
 
   return (
@@ -14,8 +22,13 @@ export function TopBar() {
 
       <nav className="tabs">
         {TABS.map((t) => (
-          <button key={t} className={t === 'Live Map' ? 'tab tab--on' : 'tab'} type="button">
-            {t}
+          <button
+            key={t.id}
+            type="button"
+            className={t.id === view ? 'tab tab--on' : 'tab'}
+            onClick={() => setView(t.id)}
+          >
+            {t.label}
           </button>
         ))}
       </nav>
