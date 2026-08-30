@@ -109,11 +109,12 @@ function build(): { trucks: Truck[]; drivers: Driver[] } {
     drivers.push({
       id: driverId,
       name: `${pick(FIRST)} ${pick(LAST)}`,
+      photo: `https://randomuser.me/api/portraits/med/men/${i % 100}.jpg`,
       truckId: plate,
       hiredMonthsAgo: 2 + Math.floor(rng() * 130),
       experienceYears: 3 + Math.floor(rng() * 25),
       rating: Math.round((4 + rng()) * 10) / 10,
-      phone: `+90 5${Math.floor(30 + rng() * 20)} ${Math.floor(100 + rng() * 899)} ${Math.floor(10 + rng() * 89)} ${Math.floor(10 + rng() * 89)}`,
+      phone: `+90 500 00 00 ${String(i).padStart(2, '0')}`,
       drivingMinSinceBreak: Math.floor(rng() * MAX_DRIVE_MIN),
       resting: false,
       restLeftSec: 0,

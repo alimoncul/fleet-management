@@ -23,6 +23,7 @@ export interface Job {
 export interface Driver {
   id: string;
   name: string;
+  photo: string;
   truckId: string;
   hiredMonthsAgo: number;
   experienceYears: number;

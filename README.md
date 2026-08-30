@@ -34,10 +34,12 @@ cp .env.example .env      # set VITE_MAPTILER_KEY=...
   truck's detail.
 - **Fleet** — every vehicle in a filterable table (class, brand, status, search):
   plate, brand/model, driver, cargo + weight, job, fuel.
-- **Analytics** — mock KPIs and charts (utilisation, on-time rate, deliveries/day,
-  active cargo mix).
-- **Crew** — driver roster with 2D avatars: tenure, experience, safety rating,
-  hours-of-service (time until the next mandatory break), assigned truck.
+- **Analytics** — mock financials (weekly revenue, gross margin, cost/km, profit per
+  delivery, outstanding invoices) plus operations KPIs and charts (revenue vs cost,
+  deliveries/day, cargo mix).
+- **Crew** — driver table (photos from [randomuser.me](https://randomuser.me), initials
+  fallback): assigned truck + job, tenure, experience, safety rating, and a
+  hours-of-service bar (time until the next mandatory break). Row → that truck on the map.
 
 ## Scripts
 

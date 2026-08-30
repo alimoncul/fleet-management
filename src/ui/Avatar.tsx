@@ -1,4 +1,7 @@
-// Deterministic 2D avatar — seeded gradient disc with initials. No network, no deps.
+import { useState } from 'react';
+
+// Deterministic 2D avatar. Uses a photo URL when given (randomuser.me portraits),
+// and falls back to a seeded gradient disc with initials — so it still works offline.
 function hash(str: string): number {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -13,20 +16,29 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
 }
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+export function Avatar({ name, photo, size = 40 }: { name: string; photo?: string; size?: number }) {
+  const [broken, setBroken] = useState(false);
+
+  if (photo && !broken) {
+    return (
+      <img
+        className="avatar avatar--photo"
+        src={photo}
+        width={size}
+        height={size}
+        alt={name}
+        loading="lazy"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
   const h = hash(name);
   const hue = h % 360;
   const hue2 = (hue + 40 + (h % 60)) % 360;
   const id = `g${h.toString(36)}`;
   return (
-    <svg
-      className="avatar"
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      role="img"
-      aria-label={name}
-    >
+    <svg className="avatar" width={size} height={size} viewBox="0 0 40 40" role="img" aria-label={name}>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={`hsl(${hue} 55% 42%)`} />

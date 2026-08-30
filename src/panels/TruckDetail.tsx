@@ -53,7 +53,7 @@ export function TruckDetail() {
               useStore.getState().setView('crew');
             }}
           >
-            <Avatar name={driver.name} size={42} />
+            <Avatar name={driver.name} photo={driver.photo} size={42} />
             <div className="drivercard__main">
               <div className="drivercard__name">{driver.name}</div>
               <div className="drivercard__sub">

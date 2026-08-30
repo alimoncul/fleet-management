@@ -25,8 +25,11 @@ The build below shipped, then pivoted to a **road-freight** fleet. What changed:
   hours-of-service (4.5 h driving → 45 min break).
 - **Fleet view** — filterable table (class / brand / status / search) with 2D truck
   icons (`src/ui/TruckIcon.tsx`), cargo + weight, job.
-- **Analytics view** — mock KPIs + inline-SVG charts.
-- **Crew view** — driver roster + detail (list `src/views/CrewView.tsx`).
+- **Analytics view** — mock financials (revenue, gross margin, cost/km, profit per
+  delivery, outstanding invoices) + operations KPIs + inline-SVG charts.
+- **Crew view** — driver table (`src/views/CrewView.tsx`), row layout like Fleet;
+  photos from randomuser.me with an initials fallback. Phone numbers are all
+  `+90 500 00 00 NN`.
 - Truck detail (right rail) now shows driver card + cargo/weight + trip progress +
   fuel / odometer.
 
