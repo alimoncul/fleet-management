@@ -49,16 +49,26 @@ let i = 1000;
 for (const [oKey, dKey, cargo, weightKg] of JOBS) {
   const o = PLACES[oKey];
   const d = PLACES[dKey];
-  const url = `${OSRM}/${o.lngLat.join(',')};${d.lngLat.join(',')}?overview=simplified&geometries=geojson`;
+  // full geometry so the polyline actually follows the roads
+  const url = `${OSRM}/${o.lngLat.join(',')};${d.lngLat.join(',')}?overview=full&geometries=geojson`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${oKey}->${dKey}: OSRM ${res.status}`);
   const route = (await res.json()).routes?.[0];
   if (!route) throw new Error(`${oKey}->${dKey}: no route`);
 
-  const path = route.geometry.coordinates.map(([lng, lat]) => [
-    Math.round(lng * 1e5) / 1e5,
-    Math.round(lat * 1e5) / 1e5,
-  ]);
+  // round to ~1 m, then thin to ~12 m spacing (keeps the road shape, cuts file size)
+  const coords = route.geometry.coordinates;
+  const far = (a, b) => {
+    const dx = (a[0] - b[0]) * 84000; // ~m per deg lng at 41°N
+    const dy = (a[1] - b[1]) * 111000;
+    return dx * dx + dy * dy >= 144; // >= 12 m
+  };
+  const path = [];
+  coords.forEach(([lng, lat], k) => {
+    const p = [Math.round(lng * 1e5) / 1e5, Math.round(lat * 1e5) / 1e5];
+    const prev = path[path.length - 1];
+    if (!prev || far(prev, p) || k === coords.length - 1) path.push(p);
+  });
 
   out.push({
     id: `JOB-${++i}`,

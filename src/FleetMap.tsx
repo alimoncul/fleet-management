@@ -6,12 +6,15 @@ import type {
   GeoJSONSource,
   LayerSpecification,
   Map as MlMap,
+  SourceSpecification,
+  StyleSpecification,
 } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { JOBS } from './mock';
-import { jobStatus } from './sim';
+import { offsetPath } from './geo';
+import { HUBS, JOBS } from './mock';
+import { jobStatus, OFFSET_M } from './sim';
 import { useStore } from './store';
 import { useSimulation } from './useSimulation';
 import type { LngLat } from './types';
@@ -19,12 +22,56 @@ import type { LngLat } from './types';
 const rawKey = import.meta.env.VITE_MAPTILER_KEY;
 const KEY = typeof rawKey === 'string' && rawKey ? rawKey : undefined;
 
-const MAP_STYLE = KEY
-  ? `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}`
-  : 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
-const DEM_URL = KEY ? `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}` : null;
+// Keyless: Esri satellite raster + AWS terrarium DEM for real 3D terrain.
+// With a MapTiler key: their hybrid (satellite + labels) style + terrain-rgb.
+const KEYLESS_STYLE: StyleSpecification = {
+  version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  sources: {
+    sat: {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#0a0d13' } },
+    { id: 'sat', type: 'raster', source: 'sat' },
+  ],
+};
 
-const INITIAL = { longitude: 28.95, latitude: 40.9, zoom: 8.4, pitch: 38, bearing: -12 };
+const MAP_STYLE: string | StyleSpecification = KEY
+  ? `https://api.maptiler.com/maps/hybrid/style.json?key=${KEY}`
+  : KEYLESS_STYLE;
+
+const DEM_SOURCE: SourceSpecification = KEY
+  ? {
+      type: 'raster-dem',
+      url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}`,
+      tileSize: 256,
+    }
+  : {
+      type: 'raster-dem',
+      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 14,
+    };
+
+const INITIAL = { longitude: 28.95, latitude: 40.9, zoom: 8.4, pitch: 58, bearing: -14 };
+
+const hubsFC: FeatureCollection = {
+  type: 'FeatureCollection',
+  features: HUBS.map((h) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: h.lngLat },
+    properties: { name: h.name },
+  })),
+};
 
 const CLASS_COLOR_EXPR: ExpressionSpecification = [
   'match',
@@ -71,13 +118,25 @@ function addArrowImage(map: MlMap): void {
 }
 
 function buildLayers(map: MlMap): void {
-  if (DEM_URL && !map.getSource('dem')) {
+  if (!map.getSource('dem')) {
     try {
-      map.addSource('dem', { type: 'raster-dem', url: DEM_URL, tileSize: 256 });
-      map.setTerrain({ source: 'dem', exaggeration: 1.2 });
+      map.addSource('dem', DEM_SOURCE);
+      map.setTerrain({ source: 'dem', exaggeration: 1.35 });
     } catch {
-      /* terrain optional */
+      /* terrain optional; map still works flat */
     }
+  }
+  try {
+    map.setSky({
+      'sky-color': '#0b1220',
+      'sky-horizon-blend': 0.5,
+      'horizon-color': '#2a3a55',
+      'horizon-fog-blend': 0.6,
+      'fog-color': '#0a0d13',
+      'fog-ground-blend': 0.4,
+    });
+  } catch {
+    /* sky optional */
   }
 
   if (map.getSource('jobs')) return;
@@ -90,11 +149,12 @@ function buildLayers(map: MlMap): void {
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#8b93a3', 'line-width': 1.5, 'line-opacity': 0.16 },
   } as LayerSpecification);
+  // selected truck's route, shifted onto its current carriageway
+  map.addSource('route-sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
-    id: 'jobs-line-sel',
+    id: 'route-sel-line',
     type: 'line',
-    source: 'jobs',
-    filter: ['==', ['get', 'id'], ''],
+    source: 'route-sel',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#f5a524', 'line-width': 3.5, 'line-opacity': 0.9 },
   } as LayerSpecification);
@@ -120,12 +180,46 @@ function buildLayers(map: MlMap): void {
     source: 'endpoints',
     layout: {
       'text-field': ['get', 'name'],
+      'text-font': ['Noto Sans Regular'],
       'text-size': 11,
       'text-offset': [0, 1.2],
       'text-anchor': 'top',
       'text-optional': true,
     },
-    paint: { 'text-color': '#c7ccd6', 'text-halo-color': '#0b0e13', 'text-halo-width': 1.2 },
+    paint: { 'text-color': '#eef0f4', 'text-halo-color': '#0b0e13', 'text-halo-width': 1.4 },
+  } as LayerSpecification);
+
+  map.addSource('hubs', { type: 'geojson', data: hubsFC });
+  map.addLayer({
+    id: 'hubs-dot',
+    type: 'circle',
+    source: 'hubs',
+    paint: {
+      'circle-radius': 3,
+      'circle-color': '#e7e9ee',
+      'circle-opacity': 0.55,
+      'circle-stroke-width': 1,
+      'circle-stroke-color': '#0b0e13',
+    },
+  } as LayerSpecification);
+  map.addLayer({
+    id: 'hubs-label',
+    type: 'symbol',
+    source: 'hubs',
+    minzoom: 8,
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['Noto Sans Regular'],
+      'text-size': 10.5,
+      'text-offset': [0, 0.8],
+      'text-anchor': 'top',
+      'text-optional': true,
+    },
+    paint: {
+      'text-color': '#c9cdd6',
+      'text-halo-color': '#0b0e13',
+      'text-halo-width': 1.4,
+    },
   } as LayerSpecification);
 
   addArrowImage(map);
@@ -191,10 +285,31 @@ export function FleetMap() {
   const selectedId = useStore((s) => s.selectedTruckId);
   const trucks = useStore((s) => s.trucks);
 
-  const selJobId = useMemo(
-    () => trucks.find((t) => t.id === selectedId)?.jobId ?? null,
+  const sel = useMemo(
+    () => trucks.find((t) => t.id === selectedId) ?? null,
     [trucks, selectedId],
   );
+  const selJobId = sel?.jobId ?? null;
+  const selLeg = sel?.leg ?? 'out';
+
+  const routeSelFC = useMemo<FeatureCollection>(() => {
+    const job = JOBS.find((j) => j.id === selJobId);
+    return {
+      type: 'FeatureCollection',
+      features: job
+        ? [
+            {
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: offsetPath(job.path, OFFSET_M, selLeg === 'back'),
+              },
+              properties: {},
+            },
+          ]
+        : [],
+    };
+  }, [selJobId, selLeg]);
 
   const endpointsFC = useMemo<FeatureCollection>(() => {
     const job = JOBS.find((j) => j.id === selJobId);
@@ -230,14 +345,14 @@ export function FleetMap() {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     map.setFilter('trucks-halo', ['==', ['get', 'id'], selectedId ?? '']);
-    map.setFilter('jobs-line-sel', ['==', ['get', 'id'], selJobId ?? '']);
-  }, [selectedId, selJobId, ready]);
+  }, [selectedId, ready]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !ready) return;
     (map.getSource('endpoints') as GeoJSONSource | undefined)?.setData(endpointsFC);
-  }, [endpointsFC, ready]);
+    (map.getSource('route-sel') as GeoJSONSource | undefined)?.setData(routeSelFC);
+  }, [endpointsFC, routeSelFC, ready]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
@@ -293,7 +408,7 @@ export function FleetMap() {
         ref={mapRef}
         initialViewState={INITIAL}
         mapStyle={MAP_STYLE}
-        maxPitch={75}
+        maxPitch={80}
         interactiveLayerIds={ready ? ['trucks-dot'] : undefined}
         onLoad={onLoad}
         onClick={onClick}

@@ -10,7 +10,7 @@ export const drivers: Driver[] = DRIVERS;
 const jobById = new Map(JOBS.map((j) => [j.id, j]));
 const driverById = new Map(drivers.map((d) => [d.id, d]));
 
-const OFFSET_M = 9; // metres right of centreline
+export const OFFSET_M = 13; // metres right of centreline (≈ onto the right-hand carriageway)
 
 function assignNextJob(t: Truck): void {
   const cur = jobById.get(t.jobId)!;

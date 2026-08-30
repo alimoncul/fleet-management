@@ -20,6 +20,11 @@ export const JOBS: Job[] = (jobsData as RawJob[]).map((j) => {
   };
 });
 
+// Unique terminals across all jobs — shown as labelled dots for orientation.
+export const HUBS: Place[] = [
+  ...new Map(JOBS.flatMap((j) => [[j.origin.name, j.origin], [j.dest.name, j.dest]] as const)).values(),
+];
+
 // ---- catalogs ----
 
 export const CLASS_COLOR: Record<TruckClass, string> = {

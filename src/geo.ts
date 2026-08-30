@@ -44,8 +44,8 @@ export function bearing(a: LngLat, b: LngLat): number {
 
 // Position + heading at fraction t (0..1) along a polyline.
 // Shift a point ~meters to the right of the travel direction — so trucks sit on
-// the correct (right-hand) side of the road for Turkey, and outbound / return
-// traffic doesn't overlap on the centreline.
+// the correct (right-hand) carriageway for Turkey, and outbound / return traffic
+// doesn't overlap on the centreline.
 export function offsetRight(lngLat: LngLat, headingDeg: number, meters: number): LngLat {
   const th = (headingDeg * Math.PI) / 180;
   const east = Math.cos(th);
@@ -53,6 +53,22 @@ export function offsetRight(lngLat: LngLat, headingDeg: number, meters: number):
   const dLat = (meters * north) / 111320;
   const dLng = (meters * east) / (111320 * Math.cos((lngLat[1] * Math.PI) / 180));
   return [lngLat[0] + dLng, lngLat[1] + dLat];
+}
+
+// Whole polyline shifted onto the right-hand carriageway, using each vertex's
+// local travel direction. `reverse` flips it for the return leg.
+export function offsetPath(path: LngLat[], meters: number, reverse = false): LngLat[] {
+  const n = path.length;
+  if (n < 2) return path.slice();
+  const out: LngLat[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = path[Math.max(0, i - 1)];
+    const b = path[Math.min(n - 1, i + 1)];
+    let h = bearing(a, b);
+    if (reverse) h = (h + 180) % 360;
+    out.push(offsetRight(path[i], h, meters));
+  }
+  return out;
 }
 
 export function along(
