@@ -26,7 +26,7 @@ const MAP_STYLE = KEY
 // ships hillshade, and there is no reliable keyless raster-dem source.
 const DEM_URL = KEY ? `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}` : null;
 
-const INITIAL = { longitude: -122.42, latitude: 37.78, zoom: 11.2, pitch: 55, bearing: -18 };
+const INITIAL = { longitude: 29.01, latitude: 41.04, zoom: 10.8, pitch: 55, bearing: -18 };
 
 const TYPE_COLOR_EXPR: ExpressionSpecification = [
   'match',

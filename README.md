@@ -1,8 +1,8 @@
 # FleetView
 
-Mock fleet-management dashboard. A 3D-tilted map of San Francisco with ~40
-simulated vehicles moving along routes in real time. Click a vehicle (on the map
-or in the list) to see its status, route, stops, and telemetry.
+Mock fleet-management dashboard. A 3D-tilted map of İstanbul with ~40 simulated
+vehicles driving real road-following routes in real time. Click a vehicle (on the
+map or in the list) to see its status, route, stops, and telemetry.
 
 Everything is faked in the browser — no backend, no network calls except map tiles.
 
@@ -34,12 +34,17 @@ cp .env.example .env
 | `npm run build` | type-check + production build |
 | `npm test` | `src/geo.test.ts` — polyline math self-check |
 | `npm run lint` | oxlint |
+| `node scripts/build-routes.mjs` | regenerate `src/routes.json` from the OSRM demo server (one-shot; edit corridors in the script) |
 
 ## How it works
 
-- **`src/mock.ts`** — 5 hand-drawn routes + ~40 seeded vehicles.
-- **`src/sim.ts`** — mutates vehicle positions each frame (bounce along the
-  polyline, drift passenger load / schedule offset, rare signal drops).
+- **`src/routes.json`** — road-following geometry for 5 İstanbul transit
+  corridors (Metrobüs, T1, M2, Kadıköy–Pendik, Beşiktaş–Sarıyer), baked once
+  from OSRM so there is no routing API at runtime.
+- **`src/mock.ts`** — loads the routes + spawns ~40 seeded vehicles.
+- **`src/sim.ts`** — mutates vehicle positions each frame (drives back and forth
+  along the road polyline, drifts passenger load / schedule offset, rare signal
+  drops).
 - **`src/useSimulation.ts`** — rAF loop pushes positions straight to the map
   source; a 2 Hz interval snapshots into the store for the panels.
 - **`src/store.ts`** — Zustand: vehicles, selection, type filters, derived alerts.
@@ -50,5 +55,6 @@ cp .env.example .env
 
 ## Not included (deliberately)
 
-Backend, auth, real routing engine, multi-page nav (top-bar tabs are visual),
-charting library, 3D building extrusions, bottom stat strips. See `PLAN.md`.
+Backend, auth, live routing engine (routes are pre-baked), multi-page nav
+(top-bar tabs are visual), charting library, 3D building extrusions, bottom stat
+strips. See `PLAN.md`.

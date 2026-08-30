@@ -39,7 +39,8 @@ This MVP takes the **look and the core interaction**, cuts the rest.
 ### Out of scope (v1) — deliberate cuts
 
 - No backend, WebSocket, auth, database.
-- No real routing engine — routes are hand-drawn polylines.
+- No live routing engine — road-following route geometry is baked once from the
+  OSRM demo server into `src/routes.json` (`scripts/build-routes.mjs`).
 - No multi-page routing — single view; nav tabs are stubs.
 - No charting library — the one sparkline is inline SVG.
 - 3D building extrusions — **stretch only** (barely visible at fleet zoom).
@@ -94,7 +95,8 @@ interface Route {
   id: string;
   name: string;                          // "Route 14"
   color: string;
-  path: [number, number][];              // GeoJSON LineString coords (hand-drawn)
+  path: [number, number][];              // road-following LineString (from OSRM)
+  seg: number[];                         // per-segment km, precomputed
   stops: { name: string; at: number }[]; // at = 0..1 fraction along path
   lengthKm: number;                      // precomputed
 }
@@ -121,10 +123,10 @@ interface Vehicle {
 
 ## 5. Mock data
 
-- **`mock/routes.ts`** — 5 hand-drawn routes in one metro area (**SF Bay Area**: terrain +
-  water resemble the reference). ~8–15 coordinate points each, drawn in geojson.io.
-  `lengthKm` precomputed once.
-- **`mock/vehicles.ts`** — ~40 vehicles seeded across routes, types, statuses, initial
+- **`src/routes.json`** — 5 real **İstanbul** transit corridors (Metrobüs, Tram T1,
+  Metro M2, Kadıköy–Pendik, Beşiktaş–Sarıyer). Waypoints in `scripts/build-routes.mjs`
+  are snapped to roads by the OSRM demo server; `seg` / `lengthKm` computed at load.
+- **`src/mock.ts`** — ~40 vehicles seeded across routes, types, statuses, initial
   progress, speed. Seeded RNG so every load looks identical.
 
 ---
@@ -289,4 +291,5 @@ README documents: get a free MapTiler key, or run keyless.
   that is why buildings are a stretch, not core.
 - **rAF + `setData` every frame** for ~40 points is trivial; if the vehicle count later grows
   past a few thousand, throttle the sim tick to ~4 Hz and interpolate in the layer.
-- City choice (SF Bay) is cosmetic — swap `mock/routes.ts` for any metro.
+- City choice (İstanbul) is cosmetic — edit corridors in `scripts/build-routes.mjs`
+  and re-run it for any metro area.
