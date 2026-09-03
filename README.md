@@ -8,7 +8,7 @@ Everything is faked in the browser — no backend, no network calls except map t
 
 | | |
 |---|---|
-| ![live map](docs/overview.png) | ![truck detail](docs/truck-detail.png) |
+| ![live map](docs/overview.jpg) | ![truck detail](docs/truck-detail.jpg) |
 | ![fleet](docs/fleet.png) | ![crew](docs/crew.png) |
 
 ## Run
